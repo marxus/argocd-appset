@@ -1,0 +1,12 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ConfigManagementPlugin
+metadata:
+  name: appset
+spec:
+  generate:
+    command:
+      - bash
+      - -co
+      - pipefail
+      - |
+        echo "$ARGOCD_ENV_SPEC" | yq '{ "metadata": { "name": "-" }, "spec": . }' | argocd --core appset generate /dev/stdin -o yaml | yq '.[] | split_doc'
