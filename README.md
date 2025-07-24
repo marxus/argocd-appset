@@ -5,9 +5,11 @@ A extension for `argocd-repo-server` that uses `argocd appset generate` as a plu
 ## Build
 
 ```sh
-docker build -t <ARGOCD_APPSET_IMAGE> .
-docker push <ARGOCD_APPSET_IMAGE>
+docker build -t <APPSET_IMAGE> .
+docker push <APPSET_IMAGE>
 ```
+
+or use the prebuilt docker image (arch supported `amd64` and `arm64`) from https://github.com/marxus/argocd-appset/pkgs/container/argocd-appset
 
 ## Installation
 
@@ -20,35 +22,35 @@ Add the following to `argocd-repo-server` deployment manifest, You can do so by 
 
 ```yaml
 containers:
-  - name: appset-cmp
-    image: <ARGOCD_APPSET_IMAGE>
+  - name: appset
+    image: ghcr.io/marxus/argocd-appset:v1.0.0 # <APPSET_IMAGE>
     securityContext: { runAsNonRoot: true, runAsUser: 999 }
     env:
-      - name: APPSET_CMP_SERVEGIT_ADDR
-        value: 127.0.0.1:4040
-      - name: APPSET_CMP_REFRESH_INTERVAL
-        value: 1m
+      - name: APPSET_REFRESH_INTERVAL
+        value: 3m
     volumeMounts:
       - name: var-files
         mountPath: /var/run/argocd
       - name: plugins
         mountPath: /home/argocd/cmp-server/plugins
-      - name: appset-cmp
+      - name: appset
         mountPath: /tmp
 volumes:
-  - name: appset-cmp
+  - name: appset
     emptyDir: {}
 ```
 
 ### Additional Installation Manifests
 
 The stdout stream producded by `argocd --core appset generate` will be used as the manifest for the ArgoCD application.<br/>
-Certian permissions are required, here is a role and role binding to enable appset generation (required only if `argocd-repo-server` service account doesn't have such permission from beforehand):
+Certian permissions are required, here is a role and role binding to enable appset generation:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
-metadata: { name: appset-cmp }
+metadata:
+  namespace: <ARGOCD_NAMESPACE>
+  name: appset
 rules:
   - apiGroups: [""]
     resources: [configmaps]
@@ -63,20 +65,65 @@ rules:
     resources: [appprojects]
     verbs: [list, get]
   - apiGroups: [argoproj.io]
-    resources: [applications, applicationsets]
+    resources: [applications]
+    verbs: [list, get, patch]
+  - apiGroups: [argoproj.io]
+    resources: [applicationsets]
     verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
-metadata: { name: appset-cmp }
+metadata:
+  namespace: <ARGOCD_NAMESPACE>
+  name: appset
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: appset-cmp
+  name: appset
 subjects:
   - kind: ServiceAccount
     name: argocd-repo-server
     namespace: <ARGOCD_NAMESPACE>
+```
+
+There is also a "fake" git for the application to consume, which controls the refresh interval, for that you'd need a simple *1* replica deployment and a service
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: <ARGOCD_NAMESPACE>
+  name: appset
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: appset
+  template:
+    metadata:
+      labels:
+        name: appset
+    spec:
+      containers:
+        - name: appset
+          image: ghcr.io/marxus/argocd-appset:v1.0.0 # <APPSET_IMAGE>
+          securityContext: { runAsNonRoot: true, runAsUser: 999 }
+          args: [servegit]
+          env:
+            - name: APPSET_REFRESH_INTERVAL
+              value: 3m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: <ARGOCD_NAMESPACE>
+  name: appset
+spec:
+  selector:
+    name: appset
+  ports:
+    - port: 80
+      targetPort: 8080
 ```
 
 ## Usage
@@ -85,14 +132,15 @@ subjects:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  namespace: <ARGOCD_NAMESPACE>
   name: my-appset
 spec:
   project: my-project
   destination: # this is usually the destination for app of apps.
     name: in-cluster
-    namespace: argocd
+    namespace: <ARGOCD_NAMESPACE>
   source:
-    repoURL: http://127.0.0.1:4040 # configurable via APPSET_CMP_SERVEGIT_ADDR
+    repoURL: http://appset # value should be the same as the service name...
     path: .
     plugin:
       name: appset # must specify the cmp's name

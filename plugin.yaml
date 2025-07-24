@@ -9,4 +9,5 @@ spec:
       - -co
       - pipefail
       - |
+        (cd /appset/list; touch "$ARGOCD_APP_NAMESPACE:$ARGOCD_APP_NAME")
         echo "$ARGOCD_ENV_SPEC" | yq '{ "metadata": { "name": "-" }, "spec": . }' | argocd --core appset generate /dev/stdin -o yaml | yq '.[] | split_doc'
