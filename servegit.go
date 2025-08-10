@@ -2,15 +2,13 @@
 package main
 
 import (
-	"os"
 	"log"
 	"net/http"
 	"net/http/cgi"
-
 )
 
 func main() {
-	log.Fatalln(http.ListenAndServe(os.Getenv("APPSET_CMP_SERVEGIT_ADDR"), &cgi.Handler{
+	log.Fatalln(http.ListenAndServe("0.0.0.0:8080", &cgi.Handler{
 		Path: "/usr/bin/git",
 		Args: []string{"http-backend"},
 		Env: []string{
