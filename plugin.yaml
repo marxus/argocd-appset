@@ -9,5 +9,8 @@ spec:
       - -co
       - pipefail
       - |
-        (cd /appset/list; touch "$ARGOCD_APP_NAMESPACE:$ARGOCD_APP_NAME")
-        echo "$ARGOCD_ENV_SPEC" | yq '{ "metadata": { "name": "-" }, "spec": . }' | argocd --core appset generate /dev/stdin -o yaml | yq '.[] | split_doc'
+        # Create tracking file for this application
+        (cd /cmp/list; [[ "$ARGOCD_APP_NAME" == *_* ]] && touch "$ARGOCD_APP_NAME" || touch "$(</run/secrets/kubernetes.io/serviceaccount/namespace)_$ARGOCD_APP_NAME")
+
+        # Generate individual applications from ApplicationSet spec
+        echo "$PARAM_SPEC" | yq '{ "metadata": { "name": "-" }, "spec": . }' | argocd appset generate /dev/stdin -o yaml | yq '.[] | split_doc'

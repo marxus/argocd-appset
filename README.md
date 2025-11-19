@@ -1,158 +1,140 @@
-# argocd-appset
+# ArgoCD AppSet Plugin
 
-A extension for `argocd-repo-server` that uses `argocd appset generate` as a plugin
+An alternative implementation of ArgoCD ApplicationSet functionality using a Config Management Plugin approach that addresses operational limitations of the official ApplicationSet controller.
 
-## Build
+## Overview
 
-```sh
-docker build -t <APPSET_IMAGE> .
-docker push <APPSET_IMAGE>
-```
+ApplicationSet generators and templating are powerful features for dynamically creating multiple Applications. However, the official ApplicationSet controller introduces operational challenges and deviates from ArgoCD's established patterns. This plugin provides ApplicationSet capabilities while maintaining ArgoCD's native Application management experience.
 
-or use the prebuilt docker image (arch supported `amd64` and `arm64`) from https://github.com/marxus/argocd-appset/pkgs/container/argocd-appset
+Instead of running a separate controller, it uses ArgoCD's existing mechanisms (manifest caching, interval git polling) and the app-of-apps pattern to achieve the same functionality within ArgoCD's established architecture.
 
-## Installation
+## Key Benefits
 
-<b>plugin - "config management plugins" / "cmp" - adding a sidecar:</b><br/>
-Documentation for this installation method, can be found here:<br/> https://argo-cd.readthedocs.io/en/stable/operator-manual/config-management-plugins
+- **Native ArgoCD Management**: ApplicationSets appear as regular Applications in the UI with full diff visibility
+- **Operational Control**: Pause, sync, and manage child Applications without controller interference
+- **Manual Sync Options**: Bulk sync operations with custom sync options like regular app-of-apps
+- **No Force-Sync Issues**: Child Applications can be individually managed for testing and hotfixes
 
-### Installation Manifests
+## Quick Start
 
-Add the following to `argocd-repo-server` deployment manifest, You can do so by patching the deployemnt, pass values to ArgoCD chart, etc...:
+See [INSTALL.md](INSTALL.md) for detailed installation instructions.
 
-```yaml
-containers:
-  - name: appset
-    image: ghcr.io/marxus/argocd-appset:v1.0.0 # <APPSET_IMAGE>
-    securityContext: { runAsNonRoot: true, runAsUser: 999 }
-    env:
-      - name: APPSET_REFRESH_INTERVAL
-        value: 3m
-    volumeMounts:
-      - name: var-files
-        mountPath: /var/run/argocd
-      - name: plugins
-        mountPath: /home/argocd/cmp-server/plugins
-      - name: appset
-        mountPath: /tmp
-volumes:
-  - name: appset
-    emptyDir: {}
-```
+## How It Works
 
-### Additional Installation Manifests
+The plugin uses a fake git repository (`appset-repo`) as a time-based trigger mechanism which emulates the reconciliation interval of the original controller. When this repository creates new commits at configured intervals, it triggers ArgoCD to refresh Applications using the `appset` plugin, which then generates child Application manifests based on the ApplicationSet specification.
 
-The stdout stream producded by `argocd --core appset generate` will be used as the manifest for the ArgoCD application.<br/>
-Certian permissions are required, here is a role and role binding to enable appset generation:
+For detailed flow description, see [FLOW.md](FLOW.md).
+
+## Why This Approach?
+
+The official ApplicationSet controller has several operational limitations including lack of management interface, inability to pause force-sync behavior, no diff visibility, and missing manual sync capabilities. This plugin-based approach addresses these issues while maintaining ApplicationSet functionality.
+
+Read more about the motivation behind this project in [MOTIVATION.md](MOTIVATION.md).
+
+## Example
+
+<table style="width: 100%">
+<tr>
+<th>Official ApplicationSet (for comparison)</th>
+<th>Using this plugin (Application with appset plugin)</th>
+</tr>
+<tr>
+<td>
 
 ```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
 metadata:
-  namespace: <ARGOCD_NAMESPACE>
-  name: appset
-rules:
-  - apiGroups: [""]
-    resources: [configmaps]
-    verbs: [list, get]
-  - apiGroups: [""]
-    resources: [secrets, services, pods]
-    verbs: [list]
-  - apiGroups: [""]
-    resources: [pods/portforward]
-    verbs: [create]
-  - apiGroups: [argoproj.io]
-    resources: [appprojects]
-    verbs: [list, get]
-  - apiGroups: [argoproj.io]
-    resources: [applications]
-    verbs: [list, get, patch]
-  - apiGroups: [argoproj.io]
-    resources: [applicationsets]
-    verbs: [list]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  namespace: <ARGOCD_NAMESPACE>
-  name: appset
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: appset
-subjects:
-  - kind: ServiceAccount
-    name: argocd-repo-server
-    namespace: <ARGOCD_NAMESPACE>
-```
-
-There is also a "fake" git for the application to consume, which controls the refresh interval, for that you'd need a simple *1* replica deployment and a service
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  namespace: <ARGOCD_NAMESPACE>
-  name: appset
+  name: example-appset
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      name: appset
+  goTemplate: true
+  generators:
+    - git:
+        repoURL: https://github.com/argoproj/argocd-example-apps
+        revision: HEAD
+        directories:
+          - path: '*'
   template:
     metadata:
-      labels:
-        name: appset
+      name: example-app-{{ .path.path }}
     spec:
-      containers:
-        - name: appset
-          image: ghcr.io/marxus/argocd-appset:v1.0.0 # <APPSET_IMAGE>
-          securityContext: { runAsNonRoot: true, runAsUser: 999 }
-          args: [servegit]
-          env:
-            - name: APPSET_REFRESH_INTERVAL
-              value: 3m
----
-apiVersion: v1
-kind: Service
-metadata:
-  namespace: <ARGOCD_NAMESPACE>
-  name: appset
-spec:
-  selector:
-    name: appset
-  ports:
-    - port: 80
-      targetPort: 8080
+      project: default
+      destination:
+        name: in-cluster
+        namespace: default
+      source:
+        repoURL: https://github.com/argoproj/argocd-example-apps
+        path: "{{ .path.path }}"
 ```
 
-## Usage
+</td>
+<td>
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  namespace: <ARGOCD_NAMESPACE>
-  name: my-appset
+  name: example-appset
 spec:
-  project: my-project
-  destination: # this is usually the destination for app of apps.
+  project: default
+  destination:
     name: in-cluster
-    namespace: <ARGOCD_NAMESPACE>
+    namespace: argocd
   source:
-    repoURL: http://appset # value should be the same as the service name...
+    repoURL: http://appset-repo
     path: .
     plugin:
-      name: appset # must specify the cmp's name
-      env:
-        # regular applicationset spec. some attributes only have meaning for the applicationset controller,
-        # so they might be ignored during generation. usually they are not required since we have a real app
-        # owning the generated output having better more flexiable alternatives.
-        - name: SPEC
-          value: |
-            generators: ...
-            goTemplate: ...
-            goTemplateOptions: ...
-            template: ...
-            templatePatch: ...
+      name: appset
+      parameters:
+        - name: spec
+          string: |
+            goTemplate: true
+            generators:
+              - git:
+                  repoURL: https://github.com/argoproj/argocd-example-apps
+                  revision: HEAD
+                  directories:
+                    - path: '*'
+            template:
+              metadata:
+                name: example-app-{{ .path.path }}
+              spec:
+                project: default
+                destination:
+                  name: in-cluster
+                  namespace: default
+                source:
+                  repoURL: https://github.com/argoproj/argocd-example-apps
+                  path: "{{ .path.path }}"
 ```
+
+</td>
+</tr>
+</table>
+
+While I apologize for the additional boilerplate code required when using the plugin approach. As shown in the comparison above, the ApplicationSet specification passed to the plugin is identical to the regular ApplicationSet spec - no modifications needed. However, some fields from the original spec might not be respected, since they tell the controller how to act, but they do not affect how generating the manifests works. That's okay because we now have a real Application that can give us the operational functions needed to control everything - and even better!
+
+While the plugin wrapper adds some manifest overhead, I believe the operational benefits (native ArgoCD management, diff visibility, sync control, and manual operations) justify this small amount of additional boilerplate configuration.
+
+## Screenshots
+
+These screenshots demonstrate some of the key benefits mentioned above - native ArgoCD management with sync control and application management screens that are not available with the official ApplicationSet controller.
+
+<table style="width: 100%">
+<tr>
+<td>
+
+[![Screen 1](screen-1.png)](screen-1.png)
+
+</td>
+<td>
+
+[![Screen 2](screen-2.png)](screen-2.png)
+
+</td>
+</tr>
+</table>
+
+## License
+
+MIT

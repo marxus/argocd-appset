@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: example-appset
+spec:
+  # will create the applications manifests within a project/namespace where applications are allowed to be created and managed
+  project: default
+  destination:
+    name: in-cluster
+    namespace: argocd
+  # some boilerplate code for making `appset` plugin work
+  source:
+    repoURL: http://appset-repo
+    path: .
+    plugin:
+      name: appset
+      parameters:
+        - name: spec
+          string: | # the actual AppSet spec starts here, unfortunately indented inside `string: |`
+            goTemplate: true
+            generators:
+              - git:
+                  repoURL: https://github.com/argoproj/argocd-example-apps
+                  directories:
+                    - path: '*'
+            template:
+              metadata:
+                name: example-app-{{ .path.path }}
+              spec:
+                project: default
+                destination:
+                  name: in-cluster
+                  namespace: default
+                source:
+                  repoURL: https://github.com/argoproj/argocd-example-apps
+                  path: "{{ .path.path }}"
