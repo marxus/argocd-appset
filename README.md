@@ -86,33 +86,36 @@ spec:
     plugin:
       name: appset
       parameters:
-        - name: spec
+        - name: appset
           string: |
-            goTemplate: true
-            generators:
-              - git:
-                  repoURL: https://github.com/argoproj/argocd-example-apps
-                  revision: HEAD
-                  directories:
-                    - path: '*'
-            template:
-              metadata:
-                name: example-app-{{ .path.path }}
-              spec:
-                project: default
-                destination:
-                  name: in-cluster
-                  namespace: default
-                source:
-                  repoURL: https://github.com/argoproj/argocd-example-apps
-                  path: "{{ .path.path }}"
+            metadata:
+              name: "-"
+            spec:
+              goTemplate: true
+              generators:
+                - git:
+                    repoURL: https://github.com/argoproj/argocd-example-apps
+                    revision: HEAD
+                    directories:
+                      - path: '*'
+              template:
+                metadata:
+                  name: example-app-{{ .path.path }}
+                spec:
+                  project: default
+                  destination:
+                    name: in-cluster
+                    namespace: default
+                  source:
+                    repoURL: https://github.com/argoproj/argocd-example-apps
+                    path: "{{ .path.path }}"
 ```
 
 </td>
 </tr>
 </table>
 
-While I apologize for the additional boilerplate code required when using the plugin approach. As shown in the comparison above, the ApplicationSet specification passed to the plugin is identical to the regular ApplicationSet spec - no modifications needed. However, some fields from the original spec might not be respected, since they tell the controller how to act, but they do not affect how generating the manifests works. That's okay because we now have a real Application that can give us the operational functions needed to control everything - and even better!
+While I apologize for the additional boilerplate code required when using the plugin approach. As shown in the comparison above, the plugin expects a full ApplicationSet manifest (with `metadata` and `spec`) passed via the `string` parameter. The `metadata.name` can be any placeholder (e.g. `"-"`) since it's only used for generation. Some fields from the original spec might not be respected, since they tell the controller how to act, but they do not affect how generating the manifests works. That's okay because we now have a real Application that can give us the operational functions needed to control everything - and even better!
 
 While the plugin wrapper adds some manifest overhead, I believe the operational benefits (native ArgoCD management, diff visibility, sync control, and manual operations) justify this small amount of additional boilerplate configuration.
 
