@@ -13,4 +13,4 @@ spec:
         (cd /cmp/list; [[ "$ARGOCD_APP_NAME" == *_* ]] && touch "$ARGOCD_APP_NAME" || touch "$(</run/secrets/kubernetes.io/serviceaccount/namespace)_$ARGOCD_APP_NAME")
 
         # Generate individual applications from ApplicationSet spec
-        echo "$PARAM_APPSET" | argocd appset generate /dev/stdin -o yaml | yq '([.] | flatten)[] | select(. != null) | split_doc'
+        echo "$PARAM_SPEC" | yq '{ "metadata": { "name": "-" }, "spec": . }' | argocd appset generate /dev/stdin -o yaml | yq '([.] | flatten)[] | select(. != null) | split_doc'

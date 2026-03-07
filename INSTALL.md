@@ -36,7 +36,7 @@ spec:
     spec:
       containers:
         - name: appset-repo
-          image: ghcr.io/marxus/argocd-appset:v2.0.0
+          image: ghcr.io/marxus/argocd-appset:v2.0.1
           args: [servegit]
           env:
             - name: APPSET_REFRESH_INTERVAL
@@ -105,7 +105,7 @@ spec:
     spec:
       containers:
         - name: appset-cmp
-          image: ghcr.io/marxus/argocd-appset:v2.0.0
+          image: ghcr.io/marxus/argocd-appset:v2.0.1
           env:
             - name: APPSET_REFRESH_INTERVAL
               value: 3m

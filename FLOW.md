@@ -19,7 +19,7 @@
 
 **4. ApplicationSet Processing**
 - Hard refresh causes the invocation of manifest generation using the `appset-cmp` sidecar container
-- The plugin receives the ApplicationSet manifest via `$PARAM_APPSET`
+- The plugin receives the ApplicationSet specification via `$PARAM_SPEC`
 
 **5. Application Generation**
 - `appset-cmp` sidecar container runs `argocd appset generate` with the provided spec which generates the applications manifests

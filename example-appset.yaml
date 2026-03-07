@@ -15,25 +15,22 @@ spec:
     plugin:
       name: appset
       parameters:
-        - name: appset
-          string: | # full ApplicationSet manifest passed directly to `argocd appset generate`
-            metadata:
-              name: "-"
-            spec:
-              goTemplate: true
-              generators:
-                - git:
-                    repoURL: https://github.com/argoproj/argocd-example-apps
-                    directories:
-                      - path: '*'
-              template:
-                metadata:
-                  name: example-app-{{ .path.path }}
-                spec:
-                  project: default
-                  destination:
-                    name: in-cluster
-                    namespace: default
-                  source:
-                    repoURL: https://github.com/argoproj/argocd-example-apps
-                    path: "{{ .path.path }}"
+        - name: spec
+          string: | # the actual AppSet spec starts here, unfortunately indented inside `string: |`
+            goTemplate: true
+            generators:
+              - git:
+                  repoURL: https://github.com/argoproj/argocd-example-apps
+                  directories:
+                    - path: '*'
+            template:
+              metadata:
+                name: example-app-{{ .path.path }}
+              spec:
+                project: default
+                destination:
+                  name: in-cluster
+                  namespace: default
+                source:
+                  repoURL: https://github.com/argoproj/argocd-example-apps
+                  path: "{{ .path.path }}"
