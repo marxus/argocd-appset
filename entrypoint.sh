@@ -36,4 +36,4 @@ fi
 ) &
 
 # Start CMP server
-exec /var/run/argocd/argocd-cmp-server
+/var/run/argocd/argocd-cmp-server
