@@ -14,7 +14,7 @@ if [ "$1" == "servegit" ]; then
     done
   ) &
 
-  exec servegit.go
+  servegit.go
 fi
 
 # Default CMP server mode, Track appset applications using a background subshell
